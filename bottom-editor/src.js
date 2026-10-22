@@ -17,7 +17,18 @@ editor.addEventListener('compositionstart',()=>{composing=true});
 editor.addEventListener('compositionend',()=>{composing=false;mark()});
 // For selections, apply styles to the selected span. For a caret, use the browser's native inline typing style.
 function styleSelection(property,value){recover();const sel=window.getSelection();if(!sel.rangeCount)return;const range=sel.getRangeAt(0);if(range.collapsed){document.execCommand('styleWithCSS',false,true);document.execCommand(property==='color'?'foreColor':'fontSize',false,property==='color'?value:'3');if(property==='fontSize'){let node=sel.anchorNode?.parentElement;if(node?.tagName==='FONT'){node.removeAttribute('size');node.style.fontSize=value}}}else{const fragment=range.extractContents(),span=document.createElement('span');span.style[property]=value;span.append(fragment);range.insertNode(span);sel.removeAllRanges();const r=document.createRange();r.selectNodeContents(span);sel.addRange(r);savedRange=r.cloneRange()}mark()}
-size.addEventListener('change',()=>styleSelection('fontSize',`${Math.max(8,Math.min(96,Number(size.value)||16))}px`));
+size.
+size.addEventListener('change', () => {
+  const px = Math.max(8, Math.min(96, Number(size.value) || 16));
+  size.value = px;
+
+  if (savedRange && !savedRange.collapsed && selectionInside()) {
+    styleSelection('fontSize', `${px}px`);
+  } else {
+    editor.style.fontSize = `${px}px`;
+    mark();
+  }
+});
 color.addEventListener('input',()=>styleSelection('color',color.value));
 bold.addEventListener('click',()=>{recover();document.execCommand('bold');mark()});
 async function openFile(){try{const path=await open({multiple:false,filters:[{name:'文本 / HTML',extensions:['html','htm','txt']}]});if(!path)return;const data=await readTextFile(path);if(/\.html?$/i.test(path)){const doc=new DOMParser().parseFromString(data,'text/html');doc.querySelectorAll('script,iframe,object,embed,style').forEach(n=>n.remove());doc.querySelectorAll('*').forEach(n=>{[...n.attributes].forEach(a=>{if(/^on/i.test(a.name)||/^(href|src)$/i.test(a.name)&&/^javascript:/i.test(a.value))n.removeAttribute(a.name)})});editor.innerHTML=doc.body.innerHTML;}else editor.textContent=data;currentPath=path;dirty=false;setStatus('已打开')}catch(e){setStatus(`打开失败：${e.message}`)}}
