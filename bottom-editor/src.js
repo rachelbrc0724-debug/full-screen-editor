@@ -15,6 +15,50 @@ function mark(){dirty=true;setStatus('未保存')}
 editor.addEventListener('input',()=>{if(!composing)mark()});
 editor.addEventListener('compositionstart',()=>{composing=true});
 editor.addEventListener('compositionend',()=>{composing=false;mark()});
+
+editor.addEventListener('paste', (e) => {
+  e.preventDefault();
+
+  const text = e.clipboardData?.getData('text/plain');
+  if (text == null) return;
+
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount) return;
+
+  const range = selection.getRangeAt(0);
+
+  if (!editor.contains(range.commonAncestorContainer)) return;
+
+  // 删除当前选中的文字
+  range.deleteContents();
+
+  // 使用工具栏当前的字号和颜色
+  const px = Math.max(8, Math.min(96, Number(size.value) || 16));
+  const span = document.createElement('span');
+
+  span.style.fontSize = `${px}px`;
+  span.style.color = color.value;
+  span.style.fontWeight = 'normal';
+  span.style.fontStyle = 'normal';
+  span.style.textDecoration = 'none';
+  span.style.backgroundColor = 'transparent';
+  span.style.whiteSpace = 'pre-wrap';
+
+  span.textContent = text;
+  range.insertNode(span);
+
+  // 将光标移动到粘贴内容末尾
+  const nextRange = document.createRange();
+  nextRange.setStartAfter(span);
+  nextRange.collapse(true);
+
+  selection.removeAllRanges();
+  selection.addRange(nextRange);
+  savedRange = nextRange.cloneRange();
+
+  editor.focus();
+  mark();
+});
 // For selections, apply styles to the selected span. For a caret, use the browser's native inline typing style.
 
 function styleSelection(property, value) {
