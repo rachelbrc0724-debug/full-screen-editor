@@ -158,6 +158,19 @@ color.addEventListener('change', () => {
   }
 });
 bold.addEventListener('click',()=>{recover();document.execCommand('bold');mark()});
+const alignLeft = document.querySelector('#alignLeft');
+const alignCenter = document.querySelector('#alignCenter');
+const alignRight = document.querySelector('#alignRight');
+
+function setAlignment(command) {
+  recover();
+  document.execCommand(command, false, null);
+  mark();
+}
+
+alignLeft.addEventListener('click', () => setAlignment('justifyLeft'));
+alignCenter.addEventListener('click', () => setAlignment('justifyCenter'));
+alignRight.addEventListener('click', () => setAlignment('justifyRight'));
 async function openFile(){try{const path=await open({multiple:false,filters:[{name:'文本 / HTML',extensions:['html','htm','txt']}]});if(!path)return;const data=await readTextFile(path);if(/\.html?$/i.test(path)){const doc=new DOMParser().parseFromString(data,'text/html');doc.querySelectorAll('script,iframe,object,embed,style').forEach(n=>n.remove());doc.querySelectorAll('*').forEach(n=>{[...n.attributes].forEach(a=>{if(/^on/i.test(a.name)||/^(href|src)$/i.test(a.name)&&/^javascript:/i.test(a.value))n.removeAttribute(a.name)})});editor.innerHTML=doc.body.innerHTML;}else editor.textContent=data;currentPath=path;dirty=false;setStatus('已打开')}catch(e){setStatus(`打开失败：${e.message}`)}}
 async function saveFile(){try{let path=currentPath;if(!path){path=await save({defaultPath:'我的文稿.html',filters:[{name:'富文本 HTML',extensions:['html']},{name:'纯文本',extensions:['txt']}]});if(!path)return}const data=/\.txt$/i.test(path)?editor.innerText:`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>我的文稿</title></head><body>${editor.innerHTML}</body></html>`;await writeTextFile(path,data);currentPath=path;dirty=false;setStatus('已保存')}catch(e){setStatus(`保存失败：${e.message}`)}}
 document.querySelector('#open').addEventListener('click',openFile);
