@@ -1,0 +1,44 @@
+
+name: Build Desktop Installers
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows-latest, macos-latest]
+
+    runs-on: ${{ matrix.platform }}
+
+    defaults:
+      run:
+        working-directory: bottom-editor
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: bottom-editor/src-tauri -> target
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build installers
+        run: npm run tauri build
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.platform }}
+          if-no-files-found: error
+          path: bottom-editor/src-tauri/target/release/bundle/
