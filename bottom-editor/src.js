@@ -16,20 +16,103 @@ editor.addEventListener('input',()=>{if(!composing)mark()});
 editor.addEventListener('compositionstart',()=>{composing=true});
 editor.addEventListener('compositionend',()=>{composing=false;mark()});
 // For selections, apply styles to the selected span. For a caret, use the browser's native inline typing style.
-function styleSelection(property,value){recover();const sel=window.getSelection();if(!sel.rangeCount)return;const range=sel.getRangeAt(0);if(range.collapsed){document.execCommand('styleWithCSS',false,true);document.execCommand(property==='color'?'foreColor':'fontSize',false,property==='color'?value:'3');if(property==='fontSize'){let node=sel.anchorNode?.parentElement;if(node?.tagName==='FONT'){node.removeAttribute('size');node.style.fontSize=value}}}else{const fragment=range.extractContents(),span=document.createElement('span');span.style[property]=value;span.append(fragment);range.insertNode(span);sel.removeAllRanges();const r=document.createRange();r.selectNodeContents(span);sel.addRange(r);savedRange=r.cloneRange()}mark()}
-size.
+
+function styleSelection(property, value) {
+  const range = savedRange?.cloneRange();
+  if (!range || range.collapsed || !editor.contains(range.commonAncestorContainer)) {
+    return false;
+  }
+
+  // 收集选中范围内的文字节点
+  const walker = document.createTreeWalker(
+    editor,
+    NodeFilter.SHOW_TEXT
+  );
+
+  const targets = [];
+  let node;
+
+  while ((node = walker.nextNode())) {
+    if (!node.textContent.length || !range.intersectsNode(node)) {
+      continue;
+    }
+
+    let start = 0;
+    let end = node.length;
+
+    if (node === range.startContainer) {
+      start = range.startOffset;
+    }
+
+    if (node === range.endContainer) {
+      end = range.endOffset;
+    }
+
+    if (start < end) {
+      targets.push({ node, start, end });
+    }
+  }
+
+  if (!targets.length) return false;
+
+  const spans = [];
+
+  // 从后往前处理，避免修改节点时影响后续定位
+  for (let i = targets.length - 1; i >= 0; i--) {
+    const { node, start, end } = targets[i];
+
+    if (end < node.length) {
+      node.splitText(end);
+    }
+
+    const selectedNode = start > 0
+      ? node.splitText(start)
+      : node;
+
+    const span = document.createElement('span');
+    span.style[property] = value;
+
+    selectedNode.parentNode.insertBefore(span, selectedNode);
+    span.appendChild(selectedNode);
+
+    spans.unshift(span);
+  }
+
+  // 恢复修改后的文字选区
+  const newRange = document.createRange();
+  newRange.setStartBefore(spans[0]);
+  newRange.setEndAfter(spans[spans.length - 1]);
+
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(newRange);
+
+  savedRange = newRange.cloneRange();
+  mark();
+
+  return true;
+}
 size.addEventListener('change', () => {
   const px = Math.max(8, Math.min(96, Number(size.value) || 16));
   size.value = px;
 
-  if (savedRange && !savedRange.collapsed && selectionInside()) {
-    styleSelection('fontSize', `${px}px`);
-  } else {
-    editor.style.fontSize = `${px}px`;
+  // 有选区：只修改选中文字
+  if (savedRange && !savedRange.collapsed) {
+    if (styleSelection('fontSize', `${px}px`)) {
+      return;
+    }
+  }
+
+  // 没有选区：修改整个编辑区的默认字号
+  editor.style.fontSize = `${px}px`;
+  mark();
+});
+color.addEventListener('change', () => {
+  if (!styleSelection('color', color.value)) {
+    editor.style.color = color.value;
     mark();
   }
 });
-color.addEventListener('input',()=>styleSelection('color',color.value));
 bold.addEventListener('click',()=>{recover();document.execCommand('bold');mark()});
 async function openFile(){try{const path=await open({multiple:false,filters:[{name:'文本 / HTML',extensions:['html','htm','txt']}]});if(!path)return;const data=await readTextFile(path);if(/\.html?$/i.test(path)){const doc=new DOMParser().parseFromString(data,'text/html');doc.querySelectorAll('script,iframe,object,embed,style').forEach(n=>n.remove());doc.querySelectorAll('*').forEach(n=>{[...n.attributes].forEach(a=>{if(/^on/i.test(a.name)||/^(href|src)$/i.test(a.name)&&/^javascript:/i.test(a.value))n.removeAttribute(a.name)})});editor.innerHTML=doc.body.innerHTML;}else editor.textContent=data;currentPath=path;dirty=false;setStatus('已打开')}catch(e){setStatus(`打开失败：${e.message}`)}}
 async function saveFile(){try{let path=currentPath;if(!path){path=await save({defaultPath:'我的文稿.html',filters:[{name:'富文本 HTML',extensions:['html']},{name:'纯文本',extensions:['txt']}]});if(!path)return}const data=/\.txt$/i.test(path)?editor.innerText:`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>我的文稿</title></head><body>${editor.innerHTML}</body></html>`;await writeTextFile(path,data);currentPath=path;dirty=false;setStatus('已保存')}catch(e){setStatus(`保存失败：${e.message}`)}}
