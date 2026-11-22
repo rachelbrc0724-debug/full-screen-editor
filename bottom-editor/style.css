@@ -43,3 +43,19 @@ footer {
   flex: 0 0 auto;
   width: 100%;
 }
+
+/* 自定义行间距输入框 */
+#lineSpacing {
+  width: 68px;
+  height: 34px;
+  padding: 0 5px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: white;
+  color: #202020;
+  font-size: 13px;
+}
+
+.line-spacing-label {
+  white-space: nowrap;
+}
