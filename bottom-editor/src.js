@@ -4,6 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 const editor=document.querySelector('#editor'), status=document.querySelector('#status');
 const size=document.querySelector('#size'),color=document.querySelector('#color'),bold=document.querySelector('#bold');
+const lineSpacing = document.querySelector('#lineSpacing');
 let currentPath=null,savedRange=null,dirty=false,composing=false;
 const appWindow=getCurrentWindow();
 const setStatus=s=>status.textContent=s;
@@ -171,6 +172,104 @@ function setAlignment(command) {
 alignLeft.addEventListener('click', () => setAlignment('justifyLeft'));
 alignCenter.addEventListener('click', () => setAlignment('justifyCenter'));
 alignRight.addEventListener('click', () => setAlignment('justifyRight'));
+
+// 自定义倍数行间距
+const LINE_BLOCK_TAGS = new Set([
+  'P', 'DIV', 'LI', 'BLOCKQUOTE', 'PRE',
+  'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+  'SECTION', 'ARTICLE', 'TD', 'TH'
+]);
+
+// 获取文字所在段落
+function getLineHeightBlock(node) {
+  let el = node?.nodeType === 1
+    ? node
+    : node?.parentElement;
+
+  while (el && el !== editor) {
+    if (LINE_BLOCK_TAGS.has(el.tagName)) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+
+  return editor;
+}
+
+// 获取选区涉及的段落
+function getBlocksInRange(range) {
+  const blocks = new Set();
+
+  const walker = document.createTreeWalker(
+    editor,
+    NodeFilter.SHOW_TEXT
+  );
+
+  let node;
+
+  while ((node = walker.nextNode())) {
+    if (
+      node.textContent.length &&
+      range.intersectsNode(node)
+    ) {
+      blocks.add(getLineHeightBlock(node));
+    }
+  }
+
+  return [...blocks];
+}
+
+// 应用行间距
+function applyLineSpacing() {
+  let value = Number(lineSpacing.value);
+
+  if (!Number.isFinite(value)) return;
+
+  value = Math.max(0.5, Math.min(5, value));
+  value = Math.round(value * 100) / 100;
+
+  lineSpacing.value = String(value);
+
+  const range = savedRange?.cloneRange();
+
+  // 没有选区：设置编辑区默认行间距
+  if (
+    !range ||
+    !editor.contains(range.commonAncestorContainer)
+  ) {
+    editor.style.lineHeight = String(value);
+    mark();
+    return;
+  }
+
+  let blocks;
+
+  if (range.collapsed) {
+    // 只有光标：修改当前段落
+    blocks = [getLineHeightBlock(range.startContainer)];
+  } else {
+    // 选中文字：修改涉及的所有段落
+    blocks = getBlocksInRange(range);
+  }
+
+  if (!blocks.length) {
+    blocks = [editor];
+  }
+
+  blocks.forEach(block => {
+    block.style.lineHeight = String(value);
+  });
+
+  // 恢复编辑器原来的选区
+  recover();
+  mark();
+}
+
+lineSpacing.addEventListener(
+  'change',
+  applyLineSpacing
+);
+
 async function openFile(){try{const path=await open({multiple:false,filters:[{name:'文本 / HTML',extensions:['html','htm','txt']}]});if(!path)return;const data=await readTextFile(path);if(/\.html?$/i.test(path)){const doc=new DOMParser().parseFromString(data,'text/html');doc.querySelectorAll('script,iframe,object,embed,style').forEach(n=>n.remove());doc.querySelectorAll('*').forEach(n=>{[...n.attributes].forEach(a=>{if(/^on/i.test(a.name)||/^(href|src)$/i.test(a.name)&&/^javascript:/i.test(a.value))n.removeAttribute(a.name)})});editor.innerHTML=doc.body.innerHTML;}else editor.textContent=data;currentPath=path;dirty=false;setStatus('已打开')}catch(e){setStatus(`打开失败：${e.message}`)}}
 async function saveFile(){try{let path=currentPath;if(!path){path=await save({defaultPath:'我的文稿.html',filters:[{name:'富文本 HTML',extensions:['html']},{name:'纯文本',extensions:['txt']}]});if(!path)return}const data=/\.txt$/i.test(path)?editor.innerText:`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>我的文稿</title></head><body>${editor.innerHTML}</body></html>`;await writeTextFile(path,data);currentPath=path;dirty=false;setStatus('已保存')}catch(e){setStatus(`保存失败：${e.message}`)}}
 document.querySelector('#open').addEventListener('click',openFile);
